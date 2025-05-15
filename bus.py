@@ -292,13 +292,17 @@ def add_to_graph(node):
     return numeric_node
 
 
-for tree in corpus:
-    add_to_graph(tree)
+def setup():
+    for tree in corpus:
+        add_to_graph(tree)
 
-symbol_to_location = defaultdict(set)
-for location, symbol in symbols_at.items():
-    symbol_to_location[(symbol, len(children_of[location]))].add(location)
-symbol_to_location = {k: sorted(v) for k, v in symbol_to_location.items()}
+    symbol_to_location = defaultdict(set)
+    for location, symbol in symbols_at.items():
+        symbol_to_location[(symbol, len(children_of[location]))].add(location)
+    symbol_to_location = {k: sorted(v) for k, v in symbol_to_location.items()}
+    return symbol_to_location
+
+symbol_to_location = setup()
 
 # print(symbols_at)
 # print(children_of)
@@ -309,6 +313,7 @@ all_locations = set(symbols_at)
 @dataclass
 class Match:
     tree: ns.SExpression
+    utility: int
     locations: Set[int]
     iteration_added: int
 
@@ -346,60 +351,76 @@ def is_subset_tree(tree1, tree2):
 
 
 def update_matches(iteration, matches):
+    # print("current matches: ", [
+    #     ns.render_s_expression(match.tree) for match in matches
+    # ])
     new_matches = matches[:]
 
     for (symbol, arity), locations in symbol_to_location.items():
-        child_locs_each = [
-            {children_of[loc][idx] for loc in locations} for idx in range(arity)
-        ]
-        # print(symbol, arity, locations)
-        all_submatches = itertools.product(
-            *[
-                [match for match in matches if child_locs_each[idx] & match.locations]
-                for idx in range(arity)
-            ]
-        )
-        all_submatches = [
-            submatches_new
-            for submatches in all_submatches
-            for submatches_new in all_combinations(submatches)
-        ]
-        for submatches in all_submatches:
-            if (
-                not arity
-                and iteration > 0
-                or arity
-                and all(match.iteration_added < iteration - 1 for match in submatches)
-            ):
-                # assert new_match in new_matches, new_match
-                continue
-            # print(submatches)
-            locs = {
-                loc
-                for loc in locations
-                if all(
-                    child_loc in submatch.locations
-                    for submatch, child_loc in zip(submatches, children_of[loc])
-                )
-            }
-            if len(locs) < 2:
-                continue
-            # print(locs)
-            new_match = Match(
-                ns.SExpression(symbol, [submatch.tree for submatch in submatches]),
-                locs,
-                iteration,
-            )
-            new_matches.append(new_match)
+        matches_for_this = compute_matches(iteration, matches, symbol, arity, locations)
+        new_matches += pareto_optimize(matches_for_this)
+    # print("new matches: ", [
+    #     ns.render_s_expression(match.tree) for match in new_matches[len(matches):]
+    # ])
     # new_matches = sorted(
     #     new_matches, key=lambda match: match.local_utility, reverse=True
     # )
-    return sorted(pareto_optimize(new_matches), key=str)
+    pareto_new_matches = pareto_optimize(new_matches)
+    # if pareto_new_matches != new_matches:
+    #     removed = {ns.render_s_expression(match.tree) for match in new_matches} - {
+    #         ns.render_s_expression(match.tree) for match in pareto_new_matches
+    #     }
+    #     print(removed)
+    #     1/0
+    return sorted(pareto_new_matches, key=str)
+
+
+def compute_matches(iteration, matches, symbol, arity, locations):
+    child_locs_each = [
+        {children_of[loc][idx] for loc in locations} for idx in range(arity)
+    ]
+    match_fringe = []
+    # print(symbol, arity, locations)
+    all_submatches = itertools.product(
+        *[
+            [match for match in matches if child_locs_each[idx] & match.locations]
+            for idx in range(arity)
+        ]
+    )
+    for submatches in all_submatches:
+        if (
+            not arity
+            and iteration > 0
+            or arity
+            and all(match.iteration_added < iteration - 1 for match in submatches)
+        ):
+            # assert new_match in new_matches, new_match
+            continue
+            # print(submatches)
+        locs = {
+            loc
+            for loc in locations
+            if all(
+                child_loc in submatch.locations
+                for submatch, child_loc in zip(submatches, children_of[loc])
+            )
+        }
+        if len(locs) < 2:
+            continue
+            # print(locs)
+        new_match = Match(
+            ns.SExpression(symbol, [submatch.tree for submatch in submatches]),
+            1 + sum(submatch.utility for submatch in submatches),
+            locs,
+            iteration,
+        )
+        match_fringe.append(new_match)
+    return match_fringe
 
 
 def is_strictly_worse_than(match1, match2):
-    return match1.locations.issubset(match2.locations) and is_subset_tree(
-        match1.tree, match2.tree
+    return match1.utility <= match2.utility and match1.locations.issubset(
+        match2.locations
     )
 
 
@@ -413,6 +434,7 @@ def pareto_optimize(new_matches):
             if i == j:
                 continue
             if is_strictly_worse_than(new_matches[i], new_matches[j]):
+                # print("Removing", new_matches[i], "because of", new_matches[j])
                 new_matches[i] = None
                 # done = False
     new_matches = [match for match in new_matches if match is not None]
@@ -422,7 +444,7 @@ def pareto_optimize(new_matches):
 
 def main():
     start = time.time()
-    matches: List[Match] = [Match(ns.SExpression("#0", ()), all_locations, -1)]
+    matches: List[Match] = [Match(ns.SExpression("#0", ()), 0, all_locations, -1)]
     for iteration in itertools.count():
         print(
             "ITERATION",
