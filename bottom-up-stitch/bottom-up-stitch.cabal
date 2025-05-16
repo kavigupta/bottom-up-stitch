@@ -64,7 +64,7 @@ executable bottom-up-stitch
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.0, containers
+    build-depends:    base, containers
 
     -- Directories containing source files.
     hs-source-dirs:   app

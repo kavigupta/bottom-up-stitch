@@ -48,11 +48,17 @@ cartProduct xs n = do
     xs' <- cartProduct xs (n - 1)
     return (x:xs')
 
+-- | Given a graph, a list of matches, a set of locations, and a child index, returns a list of matches, along with the locations of the children of the match at the given index.
+childMatches:: Graph -> [Match] -> [Int] -> Int -> [(Match, [Int])]
+childMatches graph matches locations childIndex = undefined
+    where
+
+
 
 matchesEach:: Graph -> Int -> [Match] -> String -> Int -> [Int] -> [Match]
 matchesEach graph iter matches symbol arity locations = do
         submatches <- allSubmatches
-        let consistentLoc loc = all (\(m, i) -> ((childrenOf graph ! loc) !! i `elem` locationsOf m)) (zip submatches [0..])
+        let consistentLoc loc = let children = childrenOf graph ! loc in all (\(m, i) -> (children !! i `elem` locationsOf m)) (zip submatches [0..])
         let filteredLocs = filter (consistentLoc) locations
         if (length filteredLocs < 2) then []
         else
