@@ -15,7 +15,7 @@ data Match = Match {
 
 initialMatch:: [Int] -> Match
 initialMatch locations = Match {
-    treeOf = SExpr "<var>" [],
+    treeOf = SExpr "?" [],
     utilityOf = 0,
     locationsOf = locations,
     iterationAddedOf = -1
