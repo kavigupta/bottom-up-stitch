@@ -322,39 +322,6 @@ class Match:
     locations: Set[int]
     iteration_added: int
 
-
-# def matches_for_location(location):
-#     return [match for match in matches if location in match.locations]
-
-
-def all_combinations(submatches):
-    """
-    Combine the submatches in all possible ways. E.g., (+ #1 #2) and #1 can be combined
-    as
-        (+ #1 #2), #3 -- treating the second #1 independently of the first match
-        (+ #1 #2), #1 -- treating the second #1 as the same as the first match's #1
-        (+ #1 #2), #2 -- treating the second #1 as the same as the first match's #2
-
-    We ensure that any introduced variable reuse is consistent.
-    """
-    # TODO actually do this. For now we just do not support variable reuse
-    return [submatches]
-
-
-def is_subset_tree(tree1, tree2):
-    # print(tree1, tree2)
-    if tree1.symbol.startswith("#"):
-        return True
-    if tree1.symbol != tree2.symbol:
-        return False
-    if len(tree1.children) != len(tree2.children):
-        return False
-    for child1, child2 in zip(tree1.children, tree2.children):
-        if not is_subset_tree(child1, child2):
-            return False
-    return True
-
-
 def update_matches(iteration, matches):
     # print("current matches: ", [
     #     ns.render_s_expression(match.tree) for match in matches
