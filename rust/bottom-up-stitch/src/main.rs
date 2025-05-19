@@ -6,6 +6,7 @@ use std::io::Write;
 // import BitSet
 use bit_set::BitSet;
 
+mod interning;
 
 const APP_UTIL: usize = 1;
 const SYM_UTIL: usize = 100;
@@ -21,8 +22,8 @@ struct Match {
 
 // constructor
 impl Match {
-    fn construct(tree: usize, utility: usize, locations_set: BitSet, locations: Vec<usize>, iteration_added: usize, is: &mut InternedSets) -> Self {
-        intern(is, &locations, utility);
+    fn construct(tree: usize, utility: usize, locations_set: BitSet, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
+        is.intern(&locations, utility);
         Match {
             tree,
             utility,
@@ -33,35 +34,6 @@ impl Match {
     }
 }
 
-#[derive(Debug, Clone)]
-struct InternedSets {
-    sets: Vec<Vec<usize>>,
-    set_backmap: HashMap<Vec<usize>, usize>,
-    best_utility_seen: Vec<usize>,
-}
-
-fn new_interned_sets() -> InternedSets {
-    InternedSets {
-        sets: Vec::new(),
-        set_backmap: HashMap::new(),
-        best_utility_seen: Vec::new(),
-    }
-}
-
-fn intern(is: &mut InternedSets, set: &Vec<usize>, utility: usize) -> usize {
-    if let Some(&index) = is.set_backmap.get(set) {
-        if utility > is.best_utility_seen[index] {
-            is.best_utility_seen[index] = utility;
-        }
-        return index;
-    }
-    is.sets.push(set.clone());
-    let index = is.sets.len() - 1;
-    is.set_backmap.insert(set.clone(), index);
-    is.best_utility_seen.push(utility);
-    return index;
-}
-
 fn print_match(m: &Match, set: &ExprSet) {
     println!("******************");
     println!("Tree: {:?}", set.get(m.tree).to_string());
@@ -70,7 +42,7 @@ fn print_match(m: &Match, set: &ExprSet) {
     println!("Locations: {:?}", m.locations_set.iter().map(|i| set.get(i).to_string()).collect::<Vec<_>>());
 }
 
-fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, iteration: usize, is: &mut InternedSets) -> (Vec<Match>, bool) {
+fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, iteration: usize, is: &mut interning::InternedSets) -> (Vec<Match>, bool) {
     let mut done = true;
     let mut lefts = HashMap::new();
     let mut rights = HashMap::new();
@@ -168,7 +140,7 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
         }
     }
     println!("Considered {} new matches; done={}", considered, done);
-    println!("Interned sets: {:?}", is.sets.len());
+    println!("Interned sets: {:?}", is.len());
     let mut index = 0; 
     new_matches.retain(|_| { index+=1; !to_remove[index-1] });
     // remove_dominated_matches(&mut new_matches);
@@ -194,9 +166,9 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
 //     return max_util;
 // }
 
-fn compute_max_util_parents(parents: &Vec<usize>, is: &mut InternedSets) -> usize {
-    let index = intern(is, parents, 0);
-    return is.best_utility_seen[index];
+fn compute_max_util_parents(parents: &Vec<usize>, is: &mut interning::InternedSets) -> usize {
+    let index = is.intern(parents, 0);
+    return is.get_utility(index)
 }
 
 #[derive(Debug, Clone)]
@@ -330,7 +302,7 @@ fn main() {
 
     let variable = set.parse_extend("?").unwrap();
 
-    let mut is = new_interned_sets();
+    let mut is = interning::InternedSets::new();
 
     let mut matches: Vec<Match> = vec![Match::construct(
         variable,
