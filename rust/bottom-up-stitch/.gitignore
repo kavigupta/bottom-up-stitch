@@ -1,0 +1,15 @@
+# outputs
+temp.json
+matches.txt
+
+# profiling
+temp.prof
+perf.data
+perf.data.old
+flamegraph.svg
+
+# build
+target
+
+# vscode
+.clj-kondo
