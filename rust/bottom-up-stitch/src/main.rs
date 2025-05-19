@@ -67,21 +67,8 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
             _ => panic!("Expected an application node"),
         }
     }
-    // println!("Lefts: {:?}", lefts);
-    // println!("Rights: {:?}", lefts);
-    // // right_matches[parent] = all the matches that match at the right of the parent, as indices into ms
-    // let mut right_matches: HashMap<usize, Vec<usize>> = HashMap::new();
-    // for (i, m) in ms.iter().enumerate() {
-    //     for loc in &m.locations {
-    //         if let Some(right) = rights.get(loc) {
-    //             if !right_matches.contains_key(right) {
-    //                 right_matches.insert(*right, Vec::new());
-    //             }
-    //             right_matches.get_mut(right).unwrap().push(i);
-    //         }
-    //     }
-    // }
-    // check_pareto(ms);
+
+
     let mut new_matches = ms.clone();
     let mut to_remove = vec![false; ms.len()];
     let mut stats = Statistics::new();
