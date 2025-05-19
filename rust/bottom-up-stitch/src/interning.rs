@@ -25,10 +25,6 @@ impl InternedSets {
         }
     }
 
-    pub fn get_utility(&self, index: usize) -> usize {
-        self.best_utility_seen[index]
-    }
-
     pub fn get_utility_for_set(&self, value: &Vec<usize>) -> usize {
         if let Some(&index) = self.set_backmap.get(value) {
             return self.best_utility_seen[index];

@@ -34,14 +34,6 @@ impl Match {
     }
 }
 
-fn print_match(m: &Match, set: &ExprSet) {
-    println!("******************");
-    println!("Tree: {:?}", set.get(m.tree).to_string());
-    println!("Utility: {:?}", m.utility);
-    println!("Locations: {:?}", m.locations_set);
-    println!("Locations: {:?}", m.locations_set.iter().map(|i| set.get(i).to_string()).collect::<Vec<_>>());
-}
-
 fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, iteration: usize, is: &mut interning::InternedSets) -> (Vec<Match>, bool) {
     let mut done = true;
     let mut lefts = HashMap::new();
@@ -147,30 +139,6 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
     return (new_matches, done);
 }
 
-// fn compute_max_util_parents(parents: &Vec<usize>, ms: &Vec<Match>) -> usize {
-//     let mut max_util = 0;
-//     for m in ms {
-//         let mut subset = true;
-//         for p in parents {
-//             if !m.locations_set.contains(*p) {
-//                 subset = false;
-//                 break;
-//             }
-//         }
-//         if subset {
-//             if m.utility > max_util {
-//                 max_util = m.utility;
-//             }
-//         }
-//     }
-//     return max_util;
-// }
-
-fn compute_max_util_parents(parents: &Vec<usize>, is: &mut interning::InternedSets) -> usize {
-    let index = is.intern(parents, 0);
-    return is.get_utility(index)
-}
-
 #[derive(Debug, Clone)]
 enum DominanceResult {
     Dominated(),
@@ -199,19 +167,6 @@ fn dominates_or_is_dominated(a: &Match, existing: &Vec<Match>, to_remove: &mut V
     return DominanceResult::NeitherDominates();
 }
 
-// fn check_pareto(matches: &Vec<Match>) {
-//     for i in 0..matches.len() {
-//         for j in 0..matches.len() {
-//             if i == j {
-//                 continue;
-//             }
-//             if a_dominates_b(&matches[i], &matches[j]) {
-//                 panic!("Dominated match ({} {})/{}: {:?}; {:?}", i, j, matches.len(), matches[i], matches[j]);
-//             }
-//         }
-//     }
-// }
-
 fn a_dominates_b(a: &Match, b: &Match) -> bool {
     if a.utility < b.utility {
         return false;
@@ -229,29 +184,6 @@ fn a_dominates_b(a: &Match, b: &Match) -> bool {
     // return b.locations_set.is_subset(&a.locations_set);
 }
 
-fn remove_dominated_matches(matches: &mut Vec<Match>) {
-    println!("Removing dominated matches; {} matches before", matches.len());
-    let mut dominated = vec![false; matches.len()];
-    for i in 0..matches.len() {
-        if dominated[i] {
-            continue;
-        }
-        for j in 0..matches.len() {
-            if i == j {
-                continue;
-            }
-            if dominated[j] {
-                continue;
-            }
-            if a_dominates_b(&matches[i], &matches[j]) {
-                dominated[j] = true;
-            }
-        }
-    }
-    let mut index = 0;
-    matches.retain(|_| { index+=1; !dominated[index-1] });
-    println!("{} matches after", matches.len());
-}
 
 fn main() {
     let set = &mut ExprSet::empty(Order::ChildFirst, false, false);
