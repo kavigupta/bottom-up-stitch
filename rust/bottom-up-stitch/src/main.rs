@@ -79,13 +79,16 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
         }
     }
 
-    let mut new_matches = ms.clone();
+    let mut new_matches: HashMap<Vec<usize>, Match> = HashMap::new();
+    for m in ms {
+        new_matches.insert(m.locations.clone(), m.clone());
+    }
     let mut to_remove = vec![false; ms.len()];
     let mut stats = Statistics::new();
     for left_m in (&*ms) {
         // println!("Analyzinparentsg {:?}", left_m);
         let mut parents = Vec::new();
-        for loc in &left_m.locations_set {
+        for loc in &left_m.locations {
             if let Some(parent) = lefts.get(&loc) {
                 parents.push(*parent);
             }
@@ -139,25 +142,18 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                 iteration,
                 is,
             );
-            let mr = dominates_or_is_dominated(&m_new, &new_matches, &mut to_remove);
-            // println!("Dominance result: {:?}", mr);
-            match mr {
-                DominanceResult::Dominated() => continue,
-                DominanceResult::Dominates() => {
-                    done = false;
-                }
-                DominanceResult::NeitherDominates() => {}
-            }
-            new_matches.push(m_new);
-            to_remove.push(false);
+            done = false;
+            new_matches.insert(m_new.locations.clone(), m_new);
+            // to_remove.push(false);
         }
     }
     println!("{:?}; done={}", stats, done);
     println!("Interned sets: {:?}", is.len());
     let mut index = 0; 
-    new_matches.retain(|_| { index+=1; !to_remove[index-1] });
+    // new_matches.retain(|_| { index+=1; !to_remove[index-1] });
     // remove_dominated_matches(&mut new_matches);
-    return (new_matches, done);
+    
+    return (new_matches.values().cloned().collect(), done);
 }
 
 fn compute_right_m_candidate_idxs(rights_for_parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
@@ -217,51 +213,6 @@ fn compute_still_valid_parents(
         }
     }
     return still_valid_parents;
-}
-
-#[derive(Debug, Clone)]
-enum DominanceResult {
-    Dominated(),
-    Dominates(),
-    NeitherDominates(),
-}
-
-fn dominates_or_is_dominated(a: &Match, existing: &Vec<Match>, to_remove: &mut Vec<bool>) -> DominanceResult {
-    let mut dominates = false;
-    for i in (0..existing.len()).rev() {
-    // for i in existing.len()-1..=0 {
-        if to_remove[i] {
-            continue;
-        }
-        if a_dominates_b(&existing[i], &a) {
-            return DominanceResult::Dominated();
-        }
-        if a_dominates_b(&a, &existing[i]) {
-            to_remove[i] = true;
-            dominates = true;
-        }
-    }
-    if dominates {
-        return DominanceResult::Dominates();
-    }
-    return DominanceResult::NeitherDominates();
-}
-
-fn a_dominates_b(a: &Match, b: &Match) -> bool {
-    if a.utility < b.utility {
-        return false;
-    }
-    if a.locations.len() < b.locations.len() {
-        return false;
-    }
-    // return b.locations.iter().all(|i| a.locations_set.contains(*i))
-    for i in &b.locations {
-        if !a.locations_set.contains(*i) {
-            return false;
-        }
-    }
-    return true;
-    // return b.locations_set.is_subset(&a.locations_set);
 }
 
 fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
@@ -324,40 +275,11 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
 
 fn main() {
     let set = &mut ExprSet::empty(Order::ChildFirst, false, false);
-    let corpus = [
-        // "(+ 1 (+ 2 3) (+ 3 4))",
-        // "(+ 1 (+ 2 7) (+ 3 4))",
-        // "(+ 1 a (+ 3 4))",
-        "(C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1)))",
-        "(C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0)))",
-        "(C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5)))",
-        "(T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 1 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 0 0))",
-        "(C (C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) 4.5) (M 1 0 0 0)) (T (r_s 1 2.25) (M 1 0 7.75 0))) (T (r_s 1 2.25) (M 1 0 (- 0 (* 0.5 (+ (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* 2 0.5)))) 0))) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0)))",
-        "(C (C (C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) 4.5) (M 1 0 0 0)) (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 1 (* 4 0.5))) 2.25) (M 1 0 0 (+ (* 0.5 0) (* 0.5 (+ (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 1)) (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 0)))))))) (T (r_s 1 2.25) (M 1 0 7.75 0))) (T (r_s 1 2.25) (M 1 0 (- 0 (* 0.5 (+ (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* 2 0.5)))) 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0)))",
-        "(C (C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (r_s 1 6.25) (M 1 0 7.75 0))) (T (r_s 1 6.25) (M 1 0 (- 0 (* 0.5 (+ (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* 2 0.5)))) 0))) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0)))",
-        "(C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T c (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0)))",
-        "(C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0))) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 8.25)))",
-        "(C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0))) (T (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (M 1 0 0 8.25)))",
-        "(C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (repeat (repeat (C (C (T c (M 2 0 0 0)) (T r (M 2.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 2 (/ pi 4) 0 0)) (M 1 0 (* 2 (* 0.5 (cos (/ pi 4)))) (* 2 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0))) (T (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (M 1 0 0 8.25)))",
-        "(C (C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* (+ (* 1 (+ 10 0.5)) (* 4 0.5)) (pow 0.5 0))) (M 1 0 0 0)) (T (repeat (repeat (C (C (T c (M 2 0 0 0)) (T r (M 2.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 2 (/ pi 4) 0 0)) (M 1 0 (* 2 (* 0.5 (cos (/ pi 4)))) (* 2 (* 0.5 (sin (/ pi 4))))))) 5 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) 0))) (T (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 (* (max 0 (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5)))) 0.25) 8.25))) (T (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 (- 0 (* (max 0 (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5)))) 0.25)) 8.25)))",
-        "(C (C (C (T (r_s (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) 7) (M 1 0 0 0)) (T (r_s 1 3.5) (M 1 0 7.75 0))) (T (r_s 1 3.5) (M 1 0 (- 0 (* 0.5 (+ (- (+ (* 5 (+ 2 0.5)) (* 4 0.5)) (* 0 (* 4 0.5))) (* 2 0.5)))) 0))) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 5 (M 1 0 2.5 0)) 2 (M 1 0 0 2.5)) (M 1 0 (- 0 (* 0.5 (* (- 5 1) (+ 2 0.5)))) -1.25)))",
-        "(C (T (r_s 9.5 4.5) (M 1 0 0 0)) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 9.5 4.5) (M 1 0 0 0)) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 9.5 4.5) (M 1 0 0 0)) (T (C (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 -1))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 9.5 4.5) (M 1 0 0 0)) (T (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 9.5 4.5) (M 1 0 0 0)) (T (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 0 0 0 0)) (M 1 0 0 -1))) (M 1 0 0 4.25)))",
-        "(C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (C (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 0 0 0 0)) (M 1 0 0 -1))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 4.25)))",
-        "(C (C (C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (r_s 1 2.25) (M 1 0 2.75 0))) (T (r_s 1 2.25) (M 1 0 -2.75 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 1 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 0 0)))",
-        "(C (C (C (C (C (C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (r_s 2.5 2.25) (M 1 0 0 (+ (* 0.5 0) (* 0.5 (+ (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 1)) (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 0)))))))) (T (r_s 1 2.25) (M 1 0 2.75 0))) (T (r_s 1 2.25) (M 1 0 -2.75 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T c (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 1 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 0 0))) (T (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (M 1 0 0 6.5))) (T (T (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (M 1 (- 0 (/ pi 2)) 0 0)) (M 1 0 5.25 0)))",
-        "(C (C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (r_s 2.5 2.25) (M 1 0 0 (+ (* 0.5 0) (* 0.5 (+ (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 1)) (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 0)))))))) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 1 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 0 0)))",
-        "(C (C (C (C (T (r_s 4.5 4.5) (M 1 0 0 0)) (T (r_s 2.5 2.25) (M 1 0 0 (+ (* 0.5 0) (* 0.5 (+ (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 1)) (* (+ (* 1 (+ 2 0.5)) (* 4 0.5)) (pow 0.5 0)))))))) (T (repeat (repeat (C (repeat c 1 (M 2.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 (/ pi 4) 0 0)) (M 1 0 (* 2 (* 0.5 (cos (/ pi 4)))) (* 2 (* 0.5 (sin (/ pi 4))))))) 1 (M 1 0 2.5 0)) 1 (M 1 0 0 2.5)) (M 1 0 0 0))) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 0 0 0 0)) (M 1 0 0 -1))) (M 1 0 0 6.5))) (T (T (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (M 1 (- 0 (/ pi 2)) 0 0)) (M 1 0 4.25 0)))",
-        "(C (C (C (C (T (r_s 4.5 7) (M 1 0 0 0)) (T (r_s 1 3.5) (M 1 0 2.75 0))) (T (r_s 1 3.5) (M 1 0 -2.75 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 1 (M 1 0 2.5 0)) 2 (M 1 0 0 2.5)) (M 1 0 0 -1.25))) (T (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T r (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T r (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 5.5)))",
-        "(C (C (C (C (T (r_s 4.5 7) (M 1 0 0 0)) (T (r_s 1 3.5) (M 1 0 2.75 0))) (T (r_s 1 3.5) (M 1 0 -2.75 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 1 (M 1 0 2.5 0)) 2 (M 1 0 0 2.5)) (M 1 0 0 -1.25))) (T (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (M 1 0 0 5.5)))",
-        "(C (C (C (C (C (T (r_s 4.5 7) (M 1 0 0 0)) (T (r_s 1 3.5) (M 1 0 2.75 0))) (T (r_s 1 3.5) (M 1 0 -2.75 0))) (T (repeat (repeat (C (C (T c (M 1 0 0 0)) (T r (M 1.5 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 4) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 4)))) (* 1 (* 0.5 (sin (/ pi 4))))))) 1 (M 1 0 2.5 0)) 2 (M 1 0 0 2.5)) (M 1 0 0 -1.25))) (T (C (C (C (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 1 0 0 0)) (M 1 0 0 0))) (T (T (T l (M 1 0 -0.5 0)) (M 0 0 0 0)) (M 1 0 0 -1))) (T (T c (M 1 0 -1.5 0.5)) (M 1 0 0 0.5))) (T (T c (M 1 0 1.5 0.5)) (M 1 0 0 0.5))) (M 1 0 0 5.5))) (T (T (C (C (T (T (T l (M 3 (/ pi 2) 0 -2)) (M 1 0 0 0)) (M 1 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 1))) (T (T (T l (M 1 0 -0.5 0)) (M 2 0 0 0)) (M 1 0 0 0))) (M 1 (- 0 (/ pi 2)) 0 0)) (M 1 0 5.25 0)))",
-        "(C (T (r_s 4.5 7) (M 1 0 0 0)) (T (repeat (repeat (C (repeat c 1 (M 1.5 0 0 0)) (T (T (T l (M 1 0 -0.5 0)) (M 1 (/ pi 2) 0 0)) (M 1 0 (* 1 (* 0.5 (cos (/ pi 2)))) 0.5))) 1 (M 1 0 2.5 0)) 2 (M 1 0 0 2.5)) (M 1 0 0 -1.25)))"
-    ];
+    // let corpus = json.load("/home/kavi/mit/compression_benchmark/processed/without-apps-no-lam/dials.json");
+    let path = "/home/kavi/mit/compression_benchmark/processed/without-apps-no-lam/wheels.json";
+
+    let corpus = std::fs::read_to_string(path).unwrap();
+    let corpus: Vec<String> = serde_json::from_str(&corpus).unwrap();
 
     for s in &corpus {
         set.parse_extend(s).unwrap();
