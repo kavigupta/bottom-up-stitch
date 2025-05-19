@@ -16,6 +16,7 @@ struct Match {
     tree: usize,
     utility: usize,
     locations: Vec<usize>,
+    intern_idx: usize,
     locations_set: BitSet,
     iteration_added: usize,
 }
@@ -23,11 +24,12 @@ struct Match {
 // constructor
 impl Match {
     fn construct(tree: usize, utility: usize, locations_set: BitSet, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
-        is.intern(&locations, utility);
+        let intern_idx = is.intern(&locations, utility);
         Match {
             tree,
             utility,
             locations,
+            intern_idx,
             locations_set,
             iteration_added,
         }
