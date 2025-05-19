@@ -1,6 +1,7 @@
 
 use lambdas::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 // import BitSet
@@ -58,21 +59,30 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     let mut done = true;
     let mut lefts = HashMap::new();
     let mut rights = HashMap::new();
+    let mut right_to_top = HashMap::new();
     for i in app_locs {
         match &set.nodes[*i] {
             Node::App(left, right) => {
                 lefts.insert(*left, *i);
                 rights.insert(*i, *right);
+                right_to_top.insert(*right, *i);
             }
             _ => panic!("Expected an application node"),
         }
     }
 
+    // matches_by_parent_only_right[i] contains matches that contain i's right child
+    let mut matches_by_loc: Vec<Vec<usize>> = vec![vec![]; set.nodes.len()];
+    for i in 0..ms.len() {
+        for loc in &ms[i].locations {
+            matches_by_loc[*loc].push(i);
+        }
+    }
 
     let mut new_matches = ms.clone();
     let mut to_remove = vec![false; ms.len()];
     let mut stats = Statistics::new();
-    for left_m in &*ms {
+    for left_m in (&*ms) {
         // println!("Analyzinparentsg {:?}", left_m);
         let mut parents = Vec::new();
         for loc in &left_m.locations_set {
@@ -94,9 +104,12 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
             .collect::<Vec<_>>();
         let max_util_parents = is.get_utility_for_set(&parents);//compute_max_util_parents(&parents, is);
         let recent = left_m.iteration_added == iteration - 1;
-        for right_m in ms.into_iter().rev() {
+        let right_m_candidate_idxs = compute_right_m_candidate_idxs(&rights_for_parents, &matches_by_loc);
+        // for right_m in ms.into_iter().rev() {
+        for right_m_idx in right_m_candidate_idxs.iter() {
+            let right_m = &ms[right_m_idx];
             if !recent && right_m.iteration_added != iteration - 1 {
-                break;
+                continue;
             }
             let Some ((still_valid_parents, utility)) = unify_with_right(
                 left_m,
@@ -145,6 +158,14 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     new_matches.retain(|_| { index+=1; !to_remove[index-1] });
     // remove_dominated_matches(&mut new_matches);
     return (new_matches, done);
+}
+
+fn compute_right_m_candidate_idxs(rights_for_parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
+    let mut right_m_candidate_idxs = BitSet::new();
+    for i in rights_for_parents.iter().flat_map(|p| matches_by_loc[*p].iter()) {
+        right_m_candidate_idxs.insert(*i);
+    }
+    return right_m_candidate_idxs
 }
 
 fn unify_with_right(
