@@ -69,9 +69,14 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
         if parents.len() < 2 {
             continue;
         }
+        let max_util_parents = compute_max_util_parents(&parents, &ms);
         let recent = left_m.iteration_added == iteration - 1;
         for right_m in &*ms {
             if !recent && right_m.iteration_added != iteration - 1 {
+                continue;
+            }
+            let utility = APP_UTIL + left_m.utility + right_m.utility;
+            if utility <= max_util_parents {
                 continue;
             }
             let mut still_valid_parents = vec![];
@@ -84,6 +89,7 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
             if still_valid_parents.len() < 2 {
                 continue;
             }
+            // println!("{:?} {:?}", parents, still_valid_parents);
             considered += 1;
             let m_new = Match {
                 tree: set.add(
@@ -92,7 +98,7 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
                         right_m.tree,
                     )
                 ),
-                utility: APP_UTIL + left_m.utility + right_m.utility,
+                utility: utility,
                 locations_set: BitSet::from_iter(still_valid_parents.iter().cloned()),
                 locations: still_valid_parents,
                 iteration_added: iteration,
@@ -117,6 +123,25 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
     return (new_matches, done);
 }
 
+fn compute_max_util_parents(parents: &Vec<usize>, ms: &Vec<Match>) -> usize {
+    let mut max_util = 0;
+    for m in ms {
+        let mut subset = true;
+        for p in parents {
+            if !m.locations_set.contains(*p) {
+                subset = false;
+                break;
+            }
+        }
+        if subset {
+            if m.utility > max_util {
+                max_util = m.utility;
+            }
+        }
+    }
+    return max_util;
+}
+
 #[derive(Debug, Clone)]
 enum DominanceResult {
     Dominated(),
@@ -126,7 +151,7 @@ enum DominanceResult {
 
 fn dominates_or_is_dominated(a: &Match, existing: &Vec<Match>, to_remove: &mut Vec<bool>) -> DominanceResult {
     let mut dominates = false;
-    for i in 0..existing.len() {
+    for i in (0..existing.len()).rev() {
     // for i in existing.len()-1..=0 {
         if to_remove[i] {
             continue;
@@ -271,6 +296,9 @@ fn main() {
         }
     }
     for vs in sym_to_locations.values() {
+        if vs.len() < 2 {
+            continue;
+        }
         matches.push(Match {
             tree: vs.iter().next().unwrap(),
             utility: SYM_UTIL,
