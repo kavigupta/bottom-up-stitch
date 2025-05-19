@@ -1,7 +1,6 @@
 
 use lambdas::*;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 // import BitSet
@@ -71,6 +70,18 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
         }
     }
 
+    // let mut right_to_top_subsets = HashSet::new();
+    // for m in ms {
+    //     let rtts: Vec<usize> = m.locations.iter().filter_map(|i| right_to_top.get(i)).cloned().collect();
+    //     if rtts.len() < 2 {
+    //         continue;
+    //     }
+    //     // let idx = is.intern(&rtts, m.utility);
+    //     right_to_top_subsets.insert(rtts);
+    // }
+    // println!("num matches: {:?}", ms.len());
+    // println!("Right to top subsets: {:?}", right_to_top_subsets.len());
+
     // matches_by_parent_only_right[i] contains matches that contain i's right child
     let mut matches_by_loc: Vec<Vec<usize>> = vec![vec![]; set.nodes.len()];
     for i in 0..ms.len() {
@@ -83,9 +94,8 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     for m in ms {
         new_matches.insert(m.locations.clone(), m.clone());
     }
-    let mut to_remove = vec![false; ms.len()];
     let mut stats = Statistics::new();
-    for left_m in (&*ms) {
+    for left_m in &*ms {
         // println!("Analyzinparentsg {:?}", left_m);
         let mut parents = Vec::new();
         for loc in &left_m.locations {
@@ -120,9 +130,7 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                 &parents,
                 &rights_for_parents,
                 is,
-                iteration,
                 max_util_parents,
-                recent,
                 &mut stats,
             ) else {
                 continue;
@@ -149,7 +157,7 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     }
     println!("{:?}; done={}", stats, done);
     println!("Interned sets: {:?}", is.len());
-    let mut index = 0; 
+    // let mut index = 0; 
     // new_matches.retain(|_| { index+=1; !to_remove[index-1] });
     // remove_dominated_matches(&mut new_matches);
     
@@ -170,9 +178,7 @@ fn unify_with_right(
     parents: &Vec<usize>,
     rights_for_parents: &Vec<usize>,
     is: &mut interning::InternedSets,
-    iteration: usize,
     max_util_parents: usize,
-    recent: bool,
     stats: &mut Statistics,
 ) -> Option<(Vec<usize>, usize)> {
     stats.pairs_considered_at_all += 1;
@@ -183,8 +189,6 @@ fn unify_with_right(
 
     stats.pairs_considered_for_intersection += 1;
 
-    let mut count = parents.len();
-    
     let still_valid_parents = compute_still_valid_parents(parents, rights_for_parents, right_m);
 
     if still_valid_parents.len() < 2 {
