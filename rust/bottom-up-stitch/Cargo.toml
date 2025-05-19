@@ -6,3 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+lambdas = { git = "https://github.com/mlb2251/lambdas", rev = "b8d4868"}
+bit-set = "0.8.0"
+
+[profile.release]
+debug = 1
+opt = 3
+
+[build]
+rustflags = ["-C", "force-frame-pointers=yes"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "/usr/bin/clang"
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--no-rosegment"]
+
