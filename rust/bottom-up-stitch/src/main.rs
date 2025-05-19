@@ -84,7 +84,7 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
         if parents.len() < 2 {
             continue;
         }
-        let max_util_parents = compute_max_util_parents(&parents, is);
+        let max_util_parents = is.get_utility_for_set(&parents);//compute_max_util_parents(&parents, is);
         let recent = left_m.iteration_added == iteration - 1;
         for right_m in &*ms {
             if !recent && right_m.iteration_added != iteration - 1 {
@@ -105,7 +105,7 @@ fn update_matches(ms: &mut Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>,
                 continue;
             }
 
-            let max_util = compute_max_util_parents(&still_valid_parents, is);
+            let max_util = is.get_utility_for_set(&still_valid_parents);
             if utility <= max_util {
                 continue;
             }
