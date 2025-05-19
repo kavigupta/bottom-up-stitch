@@ -228,7 +228,9 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
 
     let variable = set.parse_extend("?").unwrap();
 
-    let mut is = interning::InternedSets::new();
+    let (parents_left, parents_right) = get_parents_left_right(set);
+
+    let mut is = interning::InternedSets::new(parents_left, parents_right);
 
     let mut matches: Vec<Match> = vec![Match::construct(
         variable,
@@ -275,6 +277,21 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
         }
     }
     return matches;
+}
+
+fn get_parents_left_right(set: &ExprSet) -> (Vec<i32>, Vec<i32>) {
+    let mut parents_left = vec![-1; set.nodes.len()];
+    let mut parents_right = vec![-1; set.nodes.len()];
+    for i in 0..set.nodes.len() {
+        match &set.nodes[i] {
+            Node::App(left, right) => {
+                parents_left[*left] = i as i32;
+                parents_right[*right] = i as i32;
+            }
+            _ => {}
+        }
+    }
+    return (parents_left, parents_right);
 }
 
 fn main() {
