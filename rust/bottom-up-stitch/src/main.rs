@@ -153,6 +153,9 @@ fn compute_matrix(
     let mut left_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_app_locs];
     for i in 0..matches_with_left.len() {
         for loc in is.unintern(matches_with_left[i].intern_idx_left as usize) {
+            if app_locs[loc] == -1 {
+                continue;
+            }
             left_matches_by_loc[app_locs[loc] as usize].push(i);
         }
     }
@@ -160,6 +163,9 @@ fn compute_matrix(
     let mut right_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_app_locs];
     for i in 0..matches_with_right.len() {
         for loc in is.unintern(matches_with_right[i].intern_idx_right as usize) {
+            if app_locs[loc] == -1 {
+                continue;
+            }
             right_matches_by_loc[app_locs[loc] as usize].push(i);
         }
     }
@@ -211,9 +217,11 @@ fn unify_with_right(
 
 fn location_to_app_loc_idx(
     set: &ExprSet,
+    mask: Vec<bool>,
+    original_num_nodes: usize,
 ) -> (Vec<i32>, usize) {
-    let app_locs = (0..set.nodes.len())
-        .filter(|i| matches!(set.nodes[*i], Node::App(_, _)))
+    let app_locs = (0..original_num_nodes)
+        .filter(|i| mask[*i] && matches!(set.nodes[*i], Node::App(_, _)))
         .collect::<Vec<_>>();
     let mut backmap = vec![-1; set.nodes.len()];
     for i in 0..app_locs.len() {
@@ -222,10 +230,31 @@ fn location_to_app_loc_idx(
     return (backmap, app_locs.len());
 }
 
+fn compute_depth_by_node(set: &ExprSet) -> Vec<usize> {
+    let original_num_nodes = set.nodes.len();
+    let mut depth_by_node = vec![-1; original_num_nodes];
+    for i in 0..original_num_nodes {
+        match &set.nodes[i] {
+            Node::App(left, right) => {
+                assert!(depth_by_node[*left] != -1);
+                assert!(depth_by_node[*right] != -1);
+                depth_by_node[i] = depth_by_node[*left].max(depth_by_node[*right]) + 1;
+            }
+            Node::Prim(_) => {
+                depth_by_node[i] = 0;
+            }
+            _ => {
+                panic!("Unknown node type");
+            }
+        }
+    }
+    return depth_by_node.iter().map(|x| *x as usize).collect();
+}
+
 fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let original_num_nodes = set.nodes.len();
 
-    let (app_locs, num_app_locs) = location_to_app_loc_idx(set);
+    let depth_by_node = compute_depth_by_node(set);
 
     let variable = set.parse_extend("?").unwrap();
 
@@ -269,9 +298,11 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
         ));
     }
 
-    for i in 1.. {
+    for i in 1usize.. {
         let done;
         println!("Iteration {}, {} matches", i, matches.len());
+        let (app_locs, num_app_locs) = location_to_app_loc_idx(set, depth_by_node.iter().map(|x| *x >= i).collect(), original_num_nodes);
+        println!("App locs: {:?}", num_app_locs);
         (matches, done) = update_matches(&mut matches, set, i, &mut is, &app_locs, num_app_locs);
         if done {
             break;
@@ -297,6 +328,7 @@ fn get_parents_left_right(set: &ExprSet) -> (Vec<i32>, Vec<i32>) {
 
 fn main() {
     let set = &mut ExprSet::empty(Order::ChildFirst, false, false);
+
     // let corpus = json.load("/home/kavi/mit/compression_benchmark/processed/without-apps-no-lam/dials.json");
     let path = "/home/kavi/mit/compression_benchmark/processed/without-apps-no-lam/wheels.json";
 
