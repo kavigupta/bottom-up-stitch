@@ -8,6 +8,8 @@ use bit_set::BitSet;
 
 mod interning;
 
+const ARITY_LIMIT: usize = usize::MAX;
+
 const APP_UTIL: usize = 1;
 const SYM_UTIL: usize = 100;
 
@@ -15,6 +17,7 @@ const SYM_UTIL: usize = 100;
 struct Match {
     tree: usize,
     utility: usize,
+    num_holes: usize,
     locations: Vec<usize>,
     intern_idx: usize,
     intern_idx_left: i32,
@@ -24,11 +27,12 @@ struct Match {
 
 // constructor
 impl Match {
-    fn construct(tree: usize, utility: usize, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
+    fn construct(tree: usize, utility: usize, num_holes: usize, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
         let intern_idx = is.intern(&locations, utility);
         Match {
             tree,
             utility,
+            num_holes,
             locations,
             intern_idx,
             intern_idx_left: is.parent_set_left[intern_idx],
@@ -110,11 +114,15 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
         let max_util_parents = is.get_utility_for_set(&parents); //compute_max_util_parents(&parents, is);
         let recent = left_m.iteration_added == iteration - 1;
         // for right_m in ms.into_iter().rev() {
-        for right_m_idx in 0..matches_with_right.len() {
+        for right_m_idx in (0..matches_with_right.len()).rev() {
             if matrix[i][right_m_idx] < 2 {
                 continue;
             }
             let right_m = &matches_with_right[right_m_idx];
+            let num_holes = left_m.num_holes + right_m.num_holes;
+            if num_holes > ARITY_LIMIT {
+                continue;
+            }
             if !recent && right_m.iteration_added != iteration - 1 {
                 continue;
             }
@@ -141,6 +149,7 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                     )
                 ),
                 utility,
+                num_holes,
                 still_valid_parents,
                 iteration,
                 is,
@@ -243,6 +252,7 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let mut matches: Vec<Match> = vec![Match::construct(
         variable,
         0,
+        1,
         (0..original_num_nodes).collect(),
         0,
         &mut is,
@@ -268,6 +278,7 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
         matches.push(Match::construct(
             vs.iter().next().unwrap(),
             SYM_UTIL,
+            0,
             vs.into_iter().collect(),
             0,
             &mut is,
