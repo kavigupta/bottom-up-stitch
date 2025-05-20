@@ -59,14 +59,21 @@ impl Statistics {
     }
 }
 
-fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, iteration: usize, is: &mut interning::InternedSets) -> (Vec<Match>, bool) {
+fn update_matches(
+    ms: &Vec<Match>,
+    set: &mut ExprSet,
+    iteration: usize,
+    is: &mut interning::InternedSets,
+    app_locs: &Vec<i32>,
+    num_app_locs: usize,
+) -> (Vec<Match>, bool) {
     // ms has the invariant that iteration_added is sorted increasingly
     let mut done = true;
 
     let matches_with_right: Vec<Match> = ms.iter().filter(|m| m.intern_idx_right != -1).cloned().collect();
     let matches_with_left: Vec<Match> = ms.iter().filter(|m| m.intern_idx_left != -1).cloned().collect();
 
-    let matrix = compute_matrix(&matches_with_left, &matches_with_right, set.nodes.len(), is);
+    let matrix = compute_matrix(&matches_with_left, &matches_with_right, app_locs, num_app_locs, is);
 
     println!("Matrix: {:?}", matrix.len() * matrix[0].len());
 
@@ -136,23 +143,29 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, iteration: usize, is: &mut
     return (new_matches.values().cloned().collect(), done);
 }
 
-fn compute_matrix(matches_with_left: &Vec<Match>, matches_with_right: &Vec<Match>, num_nodes: usize, is: &mut interning::InternedSets) -> Vec<Vec<u8>> {
-    let mut left_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_nodes];
+fn compute_matrix(
+    matches_with_left: &Vec<Match>,
+    matches_with_right: &Vec<Match>,
+    app_locs: &Vec<i32>,
+    num_app_locs: usize,
+    is: &mut interning::InternedSets
+) -> Vec<Vec<u8>> {
+    let mut left_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_app_locs];
     for i in 0..matches_with_left.len() {
         for loc in is.unintern(matches_with_left[i].intern_idx_left as usize) {
-            left_matches_by_loc[loc].push(i);
+            left_matches_by_loc[app_locs[loc] as usize].push(i);
         }
     }
     
-    let mut right_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_nodes];
+    let mut right_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_app_locs];
     for i in 0..matches_with_right.len() {
         for loc in is.unintern(matches_with_right[i].intern_idx_right as usize) {
-            right_matches_by_loc[loc].push(i);
+            right_matches_by_loc[app_locs[loc] as usize].push(i);
         }
     }
 
     let mut matrix: Vec<Vec<u8>> = vec![vec![0; matches_with_right.len()]; matches_with_left.len()];
-    for node_idx in 0..num_nodes {
+    for node_idx in 0..num_app_locs {
         for ml in left_matches_by_loc[node_idx].iter() {
             for mr in right_matches_by_loc[node_idx].iter() {
                 matrix[*ml][*mr] += 1;
@@ -196,8 +209,23 @@ fn unify_with_right(
     return Some((still_valid_parents_idx as usize, utility));
 }
 
+fn location_to_app_loc_idx(
+    set: &ExprSet,
+) -> (Vec<i32>, usize) {
+    let app_locs = (0..set.nodes.len())
+        .filter(|i| matches!(set.nodes[*i], Node::App(_, _)))
+        .collect::<Vec<_>>();
+    let mut backmap = vec![-1; set.nodes.len()];
+    for i in 0..app_locs.len() {
+        backmap[app_locs[i]] = i as i32;
+    }
+    return (backmap, app_locs.len());
+}
+
 fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let original_num_nodes = set.nodes.len();
+
+    let (app_locs, num_app_locs) = location_to_app_loc_idx(set);
 
     let variable = set.parse_extend("?").unwrap();
 
@@ -244,7 +272,7 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     for i in 1.. {
         let done;
         println!("Iteration {}, {} matches", i, matches.len());
-        (matches, done) = update_matches(&mut matches, set, i, &mut is);
+        (matches, done) = update_matches(&mut matches, set, i, &mut is, &app_locs, num_app_locs);
         if done {
             break;
         }
