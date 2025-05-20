@@ -18,7 +18,6 @@ struct Match {
     tree: usize,
     utility: usize,
     num_holes: usize,
-    locations: Vec<usize>,
     intern_idx: usize,
     intern_idx_left: i32,
     intern_idx_right: i32,
@@ -33,7 +32,6 @@ impl Match {
             tree,
             utility,
             num_holes,
-            locations,
             intern_idx,
             intern_idx_left: is.parent_set_left[intern_idx],
             intern_idx_right: is.parent_set_right[intern_idx],
@@ -61,36 +59,9 @@ impl Statistics {
     }
 }
 
-fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, iteration: usize, is: &mut interning::InternedSets) -> (Vec<Match>, bool) {
+fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, iteration: usize, is: &mut interning::InternedSets) -> (Vec<Match>, bool) {
     // ms has the invariant that iteration_added is sorted increasingly
     let mut done = true;
-    let mut lefts = HashMap::new();
-    let mut rights = HashMap::new();
-    let mut right_to_top = HashMap::new();
-    for i in app_locs {
-        match &set.nodes[*i] {
-            Node::App(left, right) => {
-                lefts.insert(*left, *i);
-                rights.insert(*i, *right);
-                right_to_top.insert(*right, *i);
-            }
-            _ => panic!("Expected an application node"),
-        }
-    }
-
-    // let mut right_to_top_subsets = HashSet::new();
-    // for m in ms {
-    //     let rtts: Vec<usize> = m.locations.iter().filter_map(|i| right_to_top.get(i)).cloned().collect();
-    //     if rtts.len() < 2 {
-    //         continue;
-    //     }
-    //     // let idx = is.intern(&rtts, m.utility);
-    //     right_to_top_subsets.insert(rtts);
-    // }
-    // println!("num matches: {:?}", ms.len());
-    // println!("Right to top subsets: {:?}", right_to_top_subsets.len());
-
-    // matches_by_parent_only_right[i] contains matches that contain i's right child
 
     let matches_with_right: Vec<Match> = ms.iter().filter(|m| m.intern_idx_right != -1).cloned().collect();
     let matches_with_left: Vec<Match> = ms.iter().filter(|m| m.intern_idx_left != -1).cloned().collect();
@@ -161,9 +132,6 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     }
     println!("{:?}; done={}", stats, done);
     println!("Interned sets: {:?}", is.len());
-    // let mut index = 0; 
-    // new_matches.retain(|_| { index+=1; !to_remove[index-1] });
-    // remove_dominated_matches(&mut new_matches);
     
     return (new_matches.values().cloned().collect(), done);
 }
@@ -192,14 +160,6 @@ fn compute_matrix(matches_with_left: &Vec<Match>, matches_with_right: &Vec<Match
         }
     }
     return matrix
-}
-
-fn compute_right_m_candidate_idxs(parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
-    let mut right_m_candidate_idxs = BitSet::new();
-    for i in parents.iter().flat_map(|p| matches_by_loc[*p].iter()) {
-        right_m_candidate_idxs.insert(*i);
-    }
-    return right_m_candidate_idxs
 }
 
 fn unify_with_right(
@@ -238,10 +198,6 @@ fn unify_with_right(
 
 fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let original_num_nodes = set.nodes.len();
-
-    let app_locs = (0..original_num_nodes)
-        .filter(|i| matches!(set.nodes[*i], Node::App(_, _)))
-        .collect::<Vec<_>>();
 
     let variable = set.parse_extend("?").unwrap();
 
@@ -288,7 +244,7 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     for i in 1.. {
         let done;
         println!("Iteration {}, {} matches", i, matches.len());
-        (matches, done) = update_matches(&mut matches, set, &app_locs, i, &mut is);
+        (matches, done) = update_matches(&mut matches, set, i, &mut is);
         if done {
             break;
         }

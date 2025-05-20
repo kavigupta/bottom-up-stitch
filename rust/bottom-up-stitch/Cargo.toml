@@ -13,11 +13,3 @@ serde_json = "1.0.140"
 [profile.release]
 debug = 1
 opt = 3
-
-[build]
-rustflags = ["-C", "force-frame-pointers=yes"]
-
-[target.x86_64-unknown-linux-gnu]
-linker = "/usr/bin/clang"
-rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--no-rosegment"]
-

@@ -13,14 +13,6 @@ pub struct InternedSets {
     intersection_cache: HashMap<(usize, usize), i32>,
 }
 
-// fn new_interned_sets() -> InternedSets {
-//     InternedSets {
-//         sets: Vec::new(),
-//         set_backmap: HashMap::new(),
-//         best_utility_seen: Vec::new(),
-//     }
-// }
-
 impl InternedSets {
     pub fn new(parents_left: Vec<i32>, parents_right: Vec<i32>) -> InternedSets {
         InternedSets {
@@ -44,22 +36,6 @@ impl InternedSets {
             return self.best_utility_seen[index];
         }
         return 0
-    }
-
-    pub fn get_parents_left(&self, value: usize) -> Option<usize> {
-        let u = self.parent_set_left[value];
-        if u >= 0 {
-            return Some(u as usize);
-        }
-        return None;
-    }
-
-    pub fn get_parents_right(&self, value: usize) -> Option<usize> {
-        let u = self.parent_set_right[value];
-        if u >= 0 {
-            return Some(u as usize);
-        }
-        return None;
     }
 
     pub fn intersect(
@@ -133,7 +109,7 @@ fn intersect(
     parents_left: Vec<usize>,
     parents_right: Vec<usize>,
 ) -> Vec<usize> {
-    if (parents_left.len() > parents_right.len()) {
+    if parents_left.len() > parents_right.len() {
         return intersect(parents_right, parents_left);
     }
     let mut still_valid_parents = vec![];
@@ -150,12 +126,5 @@ fn intersect(
             b_ptr += 1;
         }
     }
-    // for i in 0..parents_left.len() {
-    //     // if parents_right.contains(&parents_left[i]) {
-    //     // use binary search
-    //     if parents_right.binary_search(&parents_left[i]).is_ok() {
-    //         still_valid_parents.push(parents_left[i]);
-    //     }
-    // }
     return still_valid_parents;
 }
