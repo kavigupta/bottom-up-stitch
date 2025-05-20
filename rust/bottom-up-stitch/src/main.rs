@@ -85,29 +85,38 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     // println!("Right to top subsets: {:?}", right_to_top_subsets.len());
 
     // matches_by_parent_only_right[i] contains matches that contain i's right child
+
+    let mut matches_with_right: Vec<Match> = vec![];
+    let mut parent_for_matches_with_right: Vec<usize> = vec![];
+    for m in ms {
+        let Some(right) = is.get_parents_right(m.intern_idx) else {
+            continue;
+        };
+        // let mut right = is.unintern(right);
+        // right.sort();
+        matches_with_right.push(m.clone());
+        parent_for_matches_with_right.push(right);
+    }
+
     let mut matches_by_loc: Vec<Vec<usize>> = vec![vec![]; set.nodes.len()];
-    for i in 0..ms.len() {
-        for loc in &ms[i].locations {
-            matches_by_loc[*loc].push(i);
+    for i in 0..matches_with_right.len() {
+        for loc in is.unintern(parent_for_matches_with_right[i]) {
+            matches_by_loc[loc].push(i);
         }
     }
 
-    let mut new_matches: HashMap<Vec<usize>, Match> = HashMap::new();
+
+    let mut new_matches: HashMap<usize, Match> = HashMap::new();
     for m in ms {
-        new_matches.insert(m.locations.clone(), m.clone());
+        new_matches.insert(m.intern_idx, m.clone());
     }
     let mut stats = Statistics::new();
     for left_m in &*ms {
         // println!("Analyzinparentsg {:?}", left_m);
-        let mut parents = Vec::new();
-        for loc in &left_m.locations {
-            if let Some(parent) = lefts.get(&loc) {
-                parents.push(*parent);
-            }
-        }
-        if parents.len() < 2 {
+        let Some(parents_idx) = is.get_parents_left(left_m.intern_idx) else {
             continue;
-        }
+        };
+        let parents = is.unintern(parents_idx);
         let rights_for_parents = parents.iter()
             .map(|p| {
                 if let Node::App(_, right) = &set.nodes[*p] {
@@ -119,24 +128,26 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
             .collect::<Vec<_>>();
         let max_util_parents = is.get_utility_for_set(&parents);//compute_max_util_parents(&parents, is);
         let recent = left_m.iteration_added == iteration - 1;
-        let right_m_candidate_idxs = compute_right_m_candidate_idxs(&rights_for_parents, &matches_by_loc);
+        let right_m_candidate_idxs = compute_right_m_candidate_idxs(&parents, &matches_by_loc);
         // for right_m in ms.into_iter().rev() {
         for right_m_idx in right_m_candidate_idxs.iter() {
-            let right_m = &ms[right_m_idx];
+            let right_m = &matches_with_right[right_m_idx];
             if !recent && right_m.iteration_added != iteration - 1 {
                 continue;
             }
-            let Some ((still_valid_parents, utility)) = unify_with_right(
+            let Some ((still_valid_parents_idx, utility)) = unify_with_right(
                 left_m,
                 right_m,
-                &parents,
-                &rights_for_parents,
+                parents_idx,
+                parent_for_matches_with_right[right_m_idx],
                 is,
                 max_util_parents,
                 &mut stats,
             ) else {
                 continue;
             };
+
+            let still_valid_parents = is.unintern(still_valid_parents_idx);
             
             // println!("{:?} {:?}", parents, still_valid_parents);
             let m_new = Match::construct(
@@ -153,7 +164,7 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                 is,
             );
             done = false;
-            new_matches.insert(m_new.locations.clone(), m_new);
+            new_matches.insert(m_new.intern_idx, m_new);
             // to_remove.push(false);
         }
     }
@@ -166,9 +177,9 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     return (new_matches.values().cloned().collect(), done);
 }
 
-fn compute_right_m_candidate_idxs(rights_for_parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
+fn compute_right_m_candidate_idxs(parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
     let mut right_m_candidate_idxs = BitSet::new();
-    for i in rights_for_parents.iter().flat_map(|p| matches_by_loc[*p].iter()) {
+    for i in parents.iter().flat_map(|p| matches_by_loc[*p].iter()) {
         right_m_candidate_idxs.insert(*i);
     }
     return right_m_candidate_idxs
@@ -177,12 +188,12 @@ fn compute_right_m_candidate_idxs(rights_for_parents: &Vec<usize>, matches_by_lo
 fn unify_with_right(
     left_m: &Match,
     right_m: &Match,
-    parents: &Vec<usize>,
-    rights_for_parents: &Vec<usize>,
+    parents_left_idx: usize,
+    parents_right_idx: usize,
     is: &mut interning::InternedSets,
     max_util_parents: usize,
     stats: &mut Statistics,
-) -> Option<(Vec<usize>, usize)> {
+) -> Option<(usize, usize)> {
     stats.pairs_considered_at_all += 1;
     let utility = APP_UTIL + left_m.utility + right_m.utility;
     if utility <= max_util_parents {
@@ -191,20 +202,21 @@ fn unify_with_right(
 
     stats.pairs_considered_for_intersection += 1;
 
-    let still_valid_parents = compute_still_valid_parents(parents, rights_for_parents, right_m);
+    // let still_valid_parents = compute_still_valid_parents(parents, rights_for_parents, right_m);
+    let still_valid_parents_idx = is.intersect(parents_left_idx, parents_right_idx);
 
-    if still_valid_parents.len() < 2 {
+    if still_valid_parents_idx < 0 {
         return None;
     }
 
     stats.pairs_post_intersection += 1;
 
-    let max_util = is.get_utility_for_set(&still_valid_parents);
+    let max_util = is.get_utility(still_valid_parents_idx as usize);
     if utility <= max_util {
         return None;
     }
     stats.pairs_considered_for_dominance += 1;
-    return Some((still_valid_parents, utility));
+    return Some((still_valid_parents_idx as usize, utility));
 }
 
 fn compute_still_valid_parents(
