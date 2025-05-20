@@ -137,12 +137,25 @@ fn intersect(
         return intersect(parents_right, parents_left);
     }
     let mut still_valid_parents = vec![];
-    for i in 0..parents_left.len() {
-        // if parents_right.contains(&parents_left[i]) {
-        // use binary search
-        if parents_right.binary_search(&parents_left[i]).is_ok() {
-            still_valid_parents.push(parents_left[i]);
+    let mut a_ptr = 0;
+    let mut b_ptr = 0;
+    while a_ptr < parents_left.len() && b_ptr < parents_right.len() {
+        if parents_left[a_ptr] == parents_right[b_ptr] {
+            still_valid_parents.push(parents_left[a_ptr]);
+            a_ptr += 1;
+            b_ptr += 1;
+        } else if parents_left[a_ptr] < parents_right[b_ptr] {
+            a_ptr += 1;
+        } else {
+            b_ptr += 1;
         }
     }
+    // for i in 0..parents_left.len() {
+    //     // if parents_right.contains(&parents_left[i]) {
+    //     // use binary search
+    //     if parents_right.binary_search(&parents_left[i]).is_ok() {
+    //         still_valid_parents.push(parents_left[i]);
+    //     }
+    // }
     return still_valid_parents;
 }

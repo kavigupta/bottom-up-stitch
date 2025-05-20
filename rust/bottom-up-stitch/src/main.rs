@@ -17,20 +17,18 @@ struct Match {
     utility: usize,
     locations: Vec<usize>,
     intern_idx: usize,
-    locations_set: BitSet,
     iteration_added: usize,
 }
 
 // constructor
 impl Match {
-    fn construct(tree: usize, utility: usize, locations_set: BitSet, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
+    fn construct(tree: usize, utility: usize, locations: Vec<usize>, iteration_added: usize, is: &mut interning::InternedSets) -> Self {
         let intern_idx = is.intern(&locations, utility);
         Match {
             tree,
             utility,
             locations,
             intern_idx,
-            locations_set,
             iteration_added,
         }
     }
@@ -158,7 +156,6 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                     )
                 ),
                 utility,
-                BitSet::from_iter(still_valid_parents.iter().cloned()),
                 still_valid_parents,
                 iteration,
                 is,
@@ -219,20 +216,6 @@ fn unify_with_right(
     return Some((still_valid_parents_idx as usize, utility));
 }
 
-fn compute_still_valid_parents(
-    parents: &Vec<usize>,
-    rights_for_parents: &Vec<usize>,
-    right_m: &Match,
-) -> Vec<usize> {
-    let mut still_valid_parents = vec![];
-    for i in 0..parents.len() {
-        if right_m.locations_set.contains(rights_for_parents[i]) {
-            still_valid_parents.push(parents[i]);
-        }
-    }
-    return still_valid_parents;
-}
-
 fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let original_num_nodes = set.nodes.len();
 
@@ -249,7 +232,6 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
     let mut matches: Vec<Match> = vec![Match::construct(
         variable,
         0,
-        BitSet::from_iter(0..original_num_nodes),
         (0..original_num_nodes).collect(),
         0,
         &mut is,
@@ -275,7 +257,6 @@ fn bottom_up_stitch(set: &mut ExprSet) -> Vec<Match> {
         matches.push(Match::construct(
             vs.iter().next().unwrap(),
             SYM_UTIL,
-            vs.clone(),
             vs.into_iter().collect(),
             0,
             &mut is,
