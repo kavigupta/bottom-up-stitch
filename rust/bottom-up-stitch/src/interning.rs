@@ -6,8 +6,8 @@ pub struct InternedSets {
     parents_left: Vec<i32>,
     parents_right: Vec<i32>,
     sets: Vec<Vec<usize>>,
-    parent_set_left: Vec<i32>,
-    parent_set_right: Vec<i32>,
+    pub parent_set_left: Vec<i32>,
+    pub parent_set_right: Vec<i32>,
     set_backmap: HashMap<Vec<usize>, usize>,
     best_utility_seen: Vec<usize>,
     intersection_cache: HashMap<(usize, usize), i32>,
@@ -79,9 +79,9 @@ impl InternedSets {
             self.intern(&result, 0) as i32
         };
         self.intersection_cache.insert((left_idx, right_idx), result_idx);
-        if (self.intersection_cache.len() % 1000) == 0 {
-            println!("Intersection cache size: {}", self.intersection_cache.len());
-        }
+        // if (self.intersection_cache.len() % 1000) == 0 {
+        //     println!("Intersection cache size: {}", self.intersection_cache.len());
+        // }
         return result_idx
     }
 

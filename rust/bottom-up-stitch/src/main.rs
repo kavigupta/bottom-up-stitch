@@ -17,6 +17,8 @@ struct Match {
     utility: usize,
     locations: Vec<usize>,
     intern_idx: usize,
+    intern_idx_left: i32,
+    intern_idx_right: i32,
     iteration_added: usize,
 }
 
@@ -29,6 +31,8 @@ impl Match {
             utility,
             locations,
             intern_idx,
+            intern_idx_left: is.parent_set_left[intern_idx],
+            intern_idx_right: is.parent_set_right[intern_idx],
             iteration_added,
         }
     }
@@ -84,24 +88,13 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
 
     // matches_by_parent_only_right[i] contains matches that contain i's right child
 
-    let mut matches_with_right: Vec<Match> = vec![];
-    let mut parent_for_matches_with_right: Vec<usize> = vec![];
-    for m in ms {
-        let Some(right) = is.get_parents_right(m.intern_idx) else {
-            continue;
-        };
-        // let mut right = is.unintern(right);
-        // right.sort();
-        matches_with_right.push(m.clone());
-        parent_for_matches_with_right.push(right);
-    }
+    let matches_with_right: Vec<Match> = ms.iter().filter(|m| m.intern_idx_right != -1).cloned().collect();
+    let matches_with_left: Vec<Match> = ms.iter().filter(|m| m.intern_idx_left != -1).cloned().collect();
 
-    let mut matches_by_loc: Vec<Vec<usize>> = vec![vec![]; set.nodes.len()];
-    for i in 0..matches_with_right.len() {
-        for loc in is.unintern(parent_for_matches_with_right[i]) {
-            matches_by_loc[loc].push(i);
-        }
-    }
+    let matrix = compute_matrix(&matches_with_left, &matches_with_right, set.nodes.len(), is);
+
+    println!("Matrix: {:?}", matrix.len() * matrix[0].len());
+
 
 
     let mut new_matches: HashMap<usize, Match> = HashMap::new();
@@ -109,26 +102,18 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
         new_matches.insert(m.intern_idx, m.clone());
     }
     let mut stats = Statistics::new();
-    for left_m in &*ms {
+    for i in 0..matches_with_left.len() {
+        let left_m = &matches_with_left[i];
         // println!("Analyzinparentsg {:?}", left_m);
-        let Some(parents_idx) = is.get_parents_left(left_m.intern_idx) else {
-            continue;
-        };
+        let parents_idx = left_m.intern_idx_left as usize;
         let parents = is.unintern(parents_idx);
-        let rights_for_parents = parents.iter()
-            .map(|p| {
-                if let Node::App(_, right) = &set.nodes[*p] {
-                    *right
-                } else {
-                    panic!("Expected an application node")
-                }
-            })
-            .collect::<Vec<_>>();
-        let max_util_parents = is.get_utility_for_set(&parents);//compute_max_util_parents(&parents, is);
+        let max_util_parents = is.get_utility_for_set(&parents); //compute_max_util_parents(&parents, is);
         let recent = left_m.iteration_added == iteration - 1;
-        let right_m_candidate_idxs = compute_right_m_candidate_idxs(&parents, &matches_by_loc);
         // for right_m in ms.into_iter().rev() {
-        for right_m_idx in right_m_candidate_idxs.iter() {
+        for right_m_idx in 0..matches_with_right.len() {
+            if matrix[i][right_m_idx] < 2 {
+                continue;
+            }
             let right_m = &matches_with_right[right_m_idx];
             if !recent && right_m.iteration_added != iteration - 1 {
                 continue;
@@ -137,7 +122,7 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
                 left_m,
                 right_m,
                 parents_idx,
-                parent_for_matches_with_right[right_m_idx],
+                matches_with_right[right_m_idx].intern_idx_right as usize,
                 is,
                 max_util_parents,
                 &mut stats,
@@ -172,6 +157,32 @@ fn update_matches(ms: &Vec<Match>, set: &mut ExprSet, app_locs: &Vec<usize>, ite
     // remove_dominated_matches(&mut new_matches);
     
     return (new_matches.values().cloned().collect(), done);
+}
+
+fn compute_matrix(matches_with_left: &Vec<Match>, matches_with_right: &Vec<Match>, num_nodes: usize, is: &mut interning::InternedSets) -> Vec<Vec<u8>> {
+    let mut left_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_nodes];
+    for i in 0..matches_with_left.len() {
+        for loc in is.unintern(matches_with_left[i].intern_idx_left as usize) {
+            left_matches_by_loc[loc].push(i);
+        }
+    }
+    
+    let mut right_matches_by_loc: Vec<Vec<usize>> = vec![vec![]; num_nodes];
+    for i in 0..matches_with_right.len() {
+        for loc in is.unintern(matches_with_right[i].intern_idx_right as usize) {
+            right_matches_by_loc[loc].push(i);
+        }
+    }
+
+    let mut matrix: Vec<Vec<u8>> = vec![vec![0; matches_with_right.len()]; matches_with_left.len()];
+    for node_idx in 0..num_nodes {
+        for ml in left_matches_by_loc[node_idx].iter() {
+            for mr in right_matches_by_loc[node_idx].iter() {
+                matrix[*ml][*mr] += 1;
+            }
+        }
+    }
+    return matrix
 }
 
 fn compute_right_m_candidate_idxs(parents: &Vec<usize>, matches_by_loc: &Vec<Vec<usize>>) -> BitSet {
